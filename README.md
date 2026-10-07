@@ -30,25 +30,32 @@ T6 invalid input: screenshots/T6_invalid.png
 
 ## Reflection Questions
 
+
+## Reflection Questions
+
 ### 1. The Disappearing-Data Mystery
 
-Before restarting the app, I predicted both River records would stay saved because SQLite stores information on the device. River A was 21 and River B was 35, with a total of 2 guests. I stopped the Flutter session and checked the app settings, where Force stop was already disabled, then reopened the app. The before and after screenshots are my evidence for the restart test.
-
-When the app starts, init() opens the database. Then initState() calls the loading function, which uses queryAllRows() and queryRowCount() to display the saved guests. If the records disappeared or had different IDs after restarting, that would go against my prediction.
+Before restarting, I predicted both River records would stay saved because SQLite stores the information on the device. River A was ID 1, age 21, and River B was ID 2, age 35. The guest count was 2. I stopped the Flutter session, checked App info where Force stop was disabled, and reopened the app. I used T4_before.png and T4_after.png to compare the records. When the app starts, init() opens the database, then initState() calls _refreshGuests(), which uses queryAllRows() and queryRowCount() to display the records. If the IDs or ages changed or disappeared, that would mean the data wasn't restored correctly.
 
 ### 2. Two Rivers, One Wrong Edit
 
-Since both guests had the same name, the app uses their unique IDs instead of their names when editing. On a fresh database, River A would get ID 1 and River B would get ID 2. I tested changing River B's age to 99 and canceling the edit, then saving the age as 35. The expected result was one updated row, with River A still age 21. This shows why using IDs is better than using names to identify records.
+Both guests were named River, so using their names to edit records could change the wrong person. River A had ID 1 and was 21, while River B had ID 2 and was originally 34. I canceled an edit changing River B to 99, then saved the age as 35. The update was supposed to affect only one row, leaving River A unchanged. In main.dart, _saveGuest() calls helper.update(), which uses the ID to find the correct record. If I selected guests by their position in the list and then sorted the list differently, I might accidentally edit River A instead of River B.
 
 ### 3. My Usability Walkthrough
 
-I tested adding guests, editing their ages, deleting records, and entering invalid information. The form checks for blank names and only accepts whole-number ages from 0 to 130. The delete confirmation is also useful because it prevents accidentally removing someone. One thing I would improve is adding a search bar so finding a guest would be easier if the roster got really long.
+During testing, I noticed that pressing Edit filled in the guest's information automatically, and Cancel Edit returned to the regular form. The delete confirmation was useful because I could cancel before actually removing River A. When testing invalid inputs in T6, the form displayed validation errors for blank names and ages like abc, 1.5, -1, and 131. The expected count stayed at 1 during these attempts, and after adding Acorn age 0 and Oak age 130, the final count was 3. One improvement I would make is adding a search bar so it's easier to find guests. The downside is that it would add more code and take up more screen space.
+
 
 ## Code Check
 
 I used flutter analyze to check the project.
 
 Analyzer output is saved in evidence/analysis_output.txt.
+
+Analyzer output:
+
+"Analyzing local_storage_lab...                                  
+No issues found! (ran in 1.9s)"
 
 ## Conclusion
 
