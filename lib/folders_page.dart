@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'cards_page.dart';
 import 'database_helper.dart';
 import 'models/folder.dart';
 
@@ -14,7 +15,6 @@ class FoldersPage extends StatefulWidget {
 
 class _FoldersPageState extends State<FoldersPage> {
   List<Folder> _folders = [];
-
   bool _loading = true;
   bool _busy = false;
   String? _error;
@@ -25,7 +25,6 @@ class _FoldersPageState extends State<FoldersPage> {
     _loadFolders();
   }
 
-  // Reloads folders and their card counts from SQLite.
   Future<void> _loadFolders() async {
     if (!mounted) return;
 
@@ -42,11 +41,13 @@ class _FoldersPageState extends State<FoldersPage> {
       setState(() {
         _folders = folders;
       });
-    } catch (error) {
+    } catch (error, stackTrace) {
+      debugPrint('Load folders failed: $error\n$stackTrace');
+
       if (!mounted) return;
 
       setState(() {
-        _error = 'Could not load folders: $error';
+        _error = 'Could not load folders. Tap Refresh to try again.';
       });
     } finally {
       if (mounted) {
@@ -57,7 +58,6 @@ class _FoldersPageState extends State<FoldersPage> {
     }
   }
 
-  // Displays messages at the bottom of the screen.
   void _showMessage(String message) {
     if (!mounted) return;
 
@@ -65,46 +65,13 @@ class _FoldersPageState extends State<FoldersPage> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  // Opens the dialog used to create a folder.
   Future<void> _addFolder() async {
     if (_busy) return;
 
-    final controller = TextEditingController();
-
     final name = await showDialog<String>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Create Folder'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Folder Name',
-              hintText: 'Example: Atlas',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, controller.text.trim());
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        );
-      },
+      builder: (dialogContext) => const _AddFolderDialog(),
     );
-
-    controller.dispose();
 
     if (!mounted || name == null) return;
 
@@ -113,9 +80,7 @@ class _FoldersPageState extends State<FoldersPage> {
       return;
     }
 
-    setState(() {
-      _busy = true;
-    });
+    setState(() => _busy = true);
 
     try {
       final folder = Folder(
@@ -128,92 +93,84 @@ class _FoldersPageState extends State<FoldersPage> {
       if (!mounted) return;
 
       _showMessage('Created folder "$name" with ID $id.');
-
       await _loadFolders();
-    } catch (error) {
+    } catch (error, stackTrace) {
+      debugPrint('Insert folder failed: $error\n$stackTrace');
+
       if (!mounted) return;
 
       _showMessage('Could not create folder. The name may already exist.');
-
-      debugPrint('Insert folder error: $error');
     } finally {
       if (mounted) {
-        setState(() {
-          _busy = false;
-        });
+        setState(() => _busy = false);
       }
     }
   }
 
-  // Confirms deletion before changing SQLite.
   Future<void> _deleteFolder(Folder folder) async {
     if (_busy || folder.id == null) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete Folder?'),
-          content: Text(
-            'Delete "${folder.name}" (ID ${folder.id})?\n\n'
-            'This will also delete its ${folder.cardCount} cards.',
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Folder?'),
+        content: Text(
+          'Delete "${folder.name}" (ID ${folder.id})?\n\n'
+          'This also deletes its ${folder.cardCount} cards.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
 
-    if (!mounted || confirmed != true) return;
+    if (!mounted || confirmed != true || _busy) return;
 
-    setState(() {
-      _busy = true;
-    });
+    setState(() => _busy = true);
 
     try {
       final affected = await widget.helper.deleteFolder(folder.id!);
 
       if (!mounted) return;
 
-      if (affected == 1) {
-        _showMessage('Deleted "${folder.name}".');
-      } else {
-        _showMessage('Folder was not found. Rows deleted: $affected.');
-      }
+      _showMessage(
+        affected == 1
+            ? 'Deleted "${folder.name}". Affected parent rows: 1.'
+            : 'Folder not found. Affected rows: $affected.',
+      );
 
       await _loadFolders();
-    } catch (error) {
-      if (!mounted) return;
+    } catch (error, stackTrace) {
+      debugPrint('Delete folder failed: $error\n$stackTrace');
 
-      _showMessage('Could not delete folder.');
-      debugPrint('Delete folder error: $error');
+      if (!mounted) return;
+      _showMessage('Could not delete the folder.');
     } finally {
       if (mounted) {
-        setState(() {
-          _busy = false;
-        });
+        setState(() => _busy = false);
       }
     }
   }
 
-  // Card navigation will be added in the next step.
-  void _openFolder(Folder folder) {
-    _showMessage(
-      'Opened "${folder.name}" (ID ${folder.id}). '
-      'Card screen coming next.',
+  Future<void> _openFolder(Folder folder) async {
+    if (_busy || folder.id == null) return;
+
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CardsPage(helper: widget.helper, folder: folder),
+      ),
     );
+
+    if (!mounted) return;
+    await _loadFolders();
   }
 
   @override
@@ -225,8 +182,8 @@ class _FoldersPageState extends State<FoldersPage> {
         actions: [
           IconButton(
             onPressed: _busy || _loading ? null : _loadFolders,
-            icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
@@ -252,12 +209,7 @@ class _FoldersPageState extends State<FoldersPage> {
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.only(
-                left: 12,
-                right: 12,
-                top: 12,
-                bottom: 90,
-              ),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
               itemCount: _folders.length,
               itemBuilder: (context, index) {
                 final folder = _folders[index];
@@ -267,19 +219,64 @@ class _FoldersPageState extends State<FoldersPage> {
                     leading: const Icon(Icons.folder, size: 36),
                     title: Text(folder.name),
                     subtitle: Text(
-                      'ID: ${folder.id} | '
-                      'Cards: ${folder.cardCount}',
+                      'ID: ${folder.id} | Cards: ${folder.cardCount}',
                     ),
                     onTap: _busy ? null : () => _openFolder(folder),
                     trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
                       tooltip: 'Delete ${folder.name}',
                       onPressed: _busy ? null : () => _deleteFolder(folder),
+                      icon: const Icon(Icons.delete_outline),
                     ),
                   ),
                 );
               },
             ),
+    );
+  }
+}
+
+class _AddFolderDialog extends StatefulWidget {
+  const _AddFolderDialog();
+
+  @override
+  State<_AddFolderDialog> createState() => _AddFolderDialogState();
+}
+
+class _AddFolderDialogState extends State<_AddFolderDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Create Folder'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(
+          labelText: 'Folder Name',
+          hintText: 'Example: Atlas',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context, _controller.text.trim());
+          },
+          child: const Text('Create'),
+        ),
+      ],
     );
   }
 }
