@@ -9,6 +9,10 @@ Future<void> main() async {
 
   try {
     await helper.init();
+
+    final diagnostics = await helper.getDatabaseDiagnostics();
+    debugPrint('ACTIVITY 09 DATABASE CHECK: $diagnostics');
+
     runApp(FestivalApp(helper: helper));
   } catch (error, stackTrace) {
     debugPrint('Database initialization error: $error\n$stackTrace');
